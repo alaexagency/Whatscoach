@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhatsCoach AI - Coach y Simulador de Ventas de WhatsApp</title>
+    <!-- pdf.js script for PDF text extraction on client-side -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js" crossorigin="anonymous"></script>
+    <script>
+      // Configure pdf.js worker URL via Blob to bypass cross-origin Web Worker blocks in sandboxed iframe
+      if (window.pdfjsLib) {
+        try {
+          const workerCode = 'importScripts("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js");';
+          const blob = new Blob([workerCode], { type: "application/javascript" });
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+        } catch (e) {
+          console.error("Failed to set up PDF.js worker with Blob fallback", e);
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

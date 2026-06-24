@@ -1,0 +1,6 @@
+{
+  "name": "WhatsCoach",
+  "description": "Simulador y Coach Virtual de Ventas por WhatsApp con evaluación inteligente mediante Inteligencia Artificial",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
