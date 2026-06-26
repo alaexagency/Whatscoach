@@ -15,8 +15,7 @@ async function requireAuth(req: VercelRequest): Promise<{ user: any; error: stri
   const authHeader = req.headers["authorization"] as string | undefined;
   if (!authHeader?.startsWith("Bearer ")) return { user: null, error: "No autenticado." };
   const token = authHeader.split(" ")[1];
-  // Usamos anon key para getUser — no requiere service role
-  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return { user: null, error: "Token inválido o expirado." };
   return { user, error: null };
@@ -25,7 +24,7 @@ async function requireAuth(req: VercelRequest): Promise<{ user: any; error: stri
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY"].filter(k => !process.env[k]);
+  const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(k => !process.env[k]);
   if (missing.length > 0) {
     return res.status(500).json({ error: "Error de configuración del servidor." });
   }
