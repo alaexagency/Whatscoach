@@ -1,5 +1,27 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { requireAuth, getGeminiClient, sanitizeForPrompt } from "./_shared.js";
+import { GoogleGenAI } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
+
+function sanitizeForPrompt(value: unknown, maxLength = 1000): string {
+  if (typeof value !== "string") return "";
+  return value.slice(0, maxLength).replace(/<\/?[a-zA-Z_]+>/g, "").trim();
+}
+
+function getGeminiClient() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+}
+
+async function requireAuth(req: VercelRequest): Promise<{ user: any; error: string | null }> {
+  const authHeader = req.headers["authorization"] as string | undefined;
+  if (!authHeader?.startsWith("Bearer ")) return { user: null, error: "No autenticado." };
+  const token = authHeader.split(" ")[1];
+  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  console.log("🔷 Llamando a Supabase (auth.getUser)...");
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  console.log("✅ User:", user?.id ?? null, "❌ Error:", error?.message ?? null);
+  if (error || !user) return { user: null, error: "Token inválido o expirado." };
+  return { user, error: null };
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -7,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(k => !process.env[k]);
   if (missing.length > 0) {
     console.error("❌ Variables de entorno faltantes:", missing.join(", "));
-    return res.status(500).json({ error: `Configuración incompleta en el servidor: ${missing.join(", ")}` });
+    return res.status(500).json({ error: `Configuración incompleta: ${missing.join(", ")}` });
   }
 
   const { user, error: authError } = await requireAuth(req);
@@ -43,13 +65,13 @@ Descripción: ${safeProductDesc}
 </producto>
 
 Reglas estrictas de comportamiento en WhatsApp:
-1. Responde de forma muy natural, con el tono informal y casual de WhatsApp. Usa abreviaciones simples, mensajes cortos (1 a 3 líneas máximo por mensaje).
-2. Dificultad de la simulación:
-   - "easy": Eres amable, tus dudas son sencillas y te convences rápido si el vendedor es atento.
-   - "medium": Haces objeciones normales del día a día. Necesitas ver empatía y argumentos sólidos.
-   - "hard": Eres muy frío, escéptico u ocupado. Si el vendedor te envía un párrafo muy largo, puedes quejarte.
-3. No cedas la venta al primer intento. Utiliza de forma espontánea y progresiva las siguientes objeciones del perfil: ${JSON.stringify(profile.objections)}.
-4. Si el vendedor utiliza la Base de conocimiento adicional o te brinda valor con técnicas apropiadas, muéstrate más receptivo.
+1. Responde de forma muy natural, con el tono informal y casual de WhatsApp. Mensajes cortos (1 a 3 líneas máximo).
+2. Dificultad:
+   - "easy": Eres amable, te convences rápido si el vendedor es atento.
+   - "medium": Haces objeciones normales. Necesitas ver empatía y argumentos sólidos.
+   - "hard": Eres frío y escéptico. Si el vendedor envía párrafos largos, te quejas.
+3. No cedas la venta al primer intento. Usa progresivamente: ${JSON.stringify(profile.objections)}.
+4. Si el vendedor usa técnicas apropiadas, muéstrate más receptivo.
 
 <base_conocimiento>
 ${safeKnowledge || "No se suministró base de conocimiento adicional."}
@@ -59,38 +81,35 @@ ${safeKnowledge || "No se suministró base de conocimiento adicional."}
 ${safeHistory}
 </conversacion>
 
-Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No agregues formatos de etiqueta como "Cliente: " ni comillas.
+Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. Sin etiquetas ni comillas.
 `;
 
-    const promptText =
-      history.length === 0
-        ? "Inicia la conversación saludando o haciendo una pregunta inicial acorde a tu perfil."
-        : "Genera tu siguiente respuesta corta a la última intervención del vendedor.";
+    const promptText = history.length === 0
+      ? "Inicia la conversación saludando o haciendo una pregunta inicial acorde a tu perfil."
+      : "Genera tu siguiente respuesta corta a la última intervención del vendedor.";
 
     let reply = "";
     let usedFallbackModel = false;
 
     try {
       const ai = getGeminiClient();
-      console.log("🔷 Llamando a Gemini (gemini-2.0-flash) [/api/chat]...");
+      console.log("🔷 Llamando a Gemini (gemini-2.0-flash)...");
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash",
         contents: promptText,
         config: { systemInstruction, temperature: 0.75 },
       });
-      console.log("✅ Respuesta Gemini [/api/chat]:", response.text?.slice(0, 100));
+      console.log("✅ Gemini OK:", response.text?.slice(0, 80));
       reply = response.text?.trim() || "";
     } catch (primaryError: any) {
-      console.warn("Fallo gemini-2.0-flash, intentando gemini-1.5-flash-8b...", primaryError.message);
+      console.warn("⚠️ gemini-2.0-flash falló:", primaryError.message, "— intentando gemini-1.5-flash-8b...");
       try {
         const ai = getGeminiClient();
-        console.log("🔷 Llamando a Gemini (gemini-1.5-flash-8b) fallback [/api/chat]...");
         const response = await ai.models.generateContent({
           model: "gemini-1.5-flash-8b",
           contents: promptText,
           config: { systemInstruction, temperature: 0.75 },
         });
-        console.log("✅ Respuesta Gemini fallback [/api/chat]:", response.text?.slice(0, 100));
         reply = response.text?.trim() || "";
         usedFallbackModel = true;
       } catch {
@@ -99,20 +118,18 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
     }
 
     if (!reply) throw new Error("API_RETURNED_EMPTY_RESPONSE");
-
     return res.json({ text: reply, quotaWarning: usedFallbackModel });
-  } catch (error: any) {
-    console.error("Activando simulador local de emergencia:", error.message);
 
+  } catch (error: any) {
+    console.error("⚠️ Activando simulador local:", error.message);
     try {
       const { profile, product, history } = req.body;
       const textHistory = history || [];
-      const clientObjections = (profile && profile.objections) || [
+      const clientObjections = (profile?.objections) || [
         "El precio es un poco elevado para mi presupuesto actual.",
         "No tengo tiempo para implementar esto ahora mismo.",
         "Déjame consultarlo primero con mis socios.",
       ];
-
       const objectionIndex = Math.max(0, Math.floor(textHistory.length / 2)) % clientObjections.length;
       const currentObjection = clientObjections[objectionIndex];
       const lowName = (profile?.name || "").toLowerCase();
@@ -132,7 +149,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
 
       return res.json({ text: generatedReply, quotaWarning: true, isLocalSimulated: true });
     } catch (simError: any) {
-      console.error("Falla crítica en el simulador local:", simError);
+      console.error("Falla crítica en simulador local:", simError);
       return res.status(500).json({ error: "No se pudo recuperar la simulación de respaldo." });
     }
   }

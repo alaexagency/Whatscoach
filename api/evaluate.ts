@@ -1,6 +1,40 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Type } from "@google/genai";
-import { requireAuth, getGeminiClient, sanitizeForPrompt, MASTER_TECHNIQUES } from "./_shared.js";
+import { GoogleGenAI, Type } from "@google/genai";
+import { createClient } from "@supabase/supabase-js";
+
+function sanitizeForPrompt(value: unknown, maxLength = 1000): string {
+  if (typeof value !== "string") return "";
+  return value.slice(0, maxLength).replace(/<\/?[a-zA-Z_]+>/g, "").trim();
+}
+
+function getGeminiClient() {
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+}
+
+async function requireAuth(req: VercelRequest): Promise<{ user: any; error: string | null }> {
+  const authHeader = req.headers["authorization"] as string | undefined;
+  if (!authHeader?.startsWith("Bearer ")) return { user: null, error: "No autenticado." };
+  const token = authHeader.split(" ")[1];
+  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) return { user: null, error: "Token inválido o expirado." };
+  return { user, error: null };
+}
+
+const MASTER_TECHNIQUES = [
+  { name: "Straight Line", author: "Jordan Belfort", keywords: ["transferencia de certeza", "sería una estupidez", "seguro", "definitivamente", "absoluta certeza", "sin duda"], description: "Transferencia de certeza absoluta." },
+  { name: "SPIN Selling", author: "Neil Rackham", keywords: ["situación", "problema", "implicación", "necesidad de pago", "consecuencia", "impacto", "qué pasaría si", "cuánto te cuesta"], description: "Preguntas de Situación, Problema, Implicación y Necesidad." },
+  { name: "Feel-Felt-Found", author: "Clásica", keywords: ["entiendo cómo te sientes", "muchos se han sentido", "descubrieron que", "sé por lo que pasas", "otros clientes pensaban igual"], description: "Validación y empatía empática." },
+  { name: "Benjamin Franklin Close", author: "Ben Franklin", keywords: ["pros y contras", "lista", "beneficios vs", "ventajas y desventajas", "balance", "lado positivo", "contrapesos"], description: "Listar pros (muchos) contra los contras (pocos)." },
+  { name: "Assumptive Close", author: "Clásica", keywords: ["te envío el link", "¿con qué tarjeta?", "dirección de envío", "cuándo empezamos", "agenda abierta", "dónde te lo mando"], description: "Asumir el trato cerrado y pasar a detalles de cobro." },
+  { name: "Urgencia Real", author: "Escasez", keywords: ["quedan", "últimos", "solo hoy", "se acaba", "cupo limitado", "plazas limitadas", "precio sube hoy", "hora crucial"], description: "Crear urgencia auténtica." },
+  { name: "Prueba Social", author: "Cialdini", keywords: ["testimonio", "caso de éxito", "mira esto", "te paso el caso", "resultados reales", "captura de pantalla", "audio de alumno"], description: "Mostrar evidencia de otros clientes." },
+  { name: "Reframing", author: "PNL/Ventas", keywords: ["inversión", "no es un gasto", "se paga solo", "retorno", "ahorras tiempo", "ganancia en lugar de", "en realidad representa"], description: "Re-encuadrar el costo como inversión." },
+  { name: "Alternative Close", author: "Clásica", keywords: ["opción A", "¿cuál prefieres?", "tarjeta o transferencia", "3 o 6 pagos", "mañana o tarde", "básico o premium"], description: "Dar a elegir entre dos opciones afirmativas." },
+  { name: "Porque (Cialdini)", author: "Cialdini", keywords: ["porque", "ya que", "la razón es", "te lo digo porque", "debido a que"], description: "Explicar el motivo con 'porque...'." },
+  { name: "Pain Agitate Solve", author: "Copywriting", keywords: ["imagina", "cada día que pasa", "mientras tanto", "lo que te está pasando", "frustración acumulada", "cuánto tiempo seguirás"], description: "Declarar el dolor, agitar y presentar la solución." },
+  { name: "Takeaway", author: "Clásica", keywords: ["quizás no sea para ti", "no cualquiera", "no todos califican", "tengo que evaluar", "filtrar alumnos", "verificar si hay compatibilidad"], description: "Retirar sutilmente la oportunidad." },
+];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -8,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(k => !process.env[k]);
   if (missing.length > 0) {
     console.error("❌ Variables de entorno faltantes:", missing.join(", "));
-    return res.status(500).json({ error: `Configuración incompleta en el servidor: ${missing.join(", ")}` });
+    return res.status(500).json({ error: `Configuración incompleta: ${missing.join(", ")}` });
   }
 
   const { user, error: authError } = await requireAuth(req);
@@ -34,40 +68,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .join("\n");
 
     const systemInstruction = `
-Eres WhatsCoach AI, un Coach de Ventas de Élite y mentor experto en cierres por WhatsApp de alto impacto en español.
-Tu trabajo es auditar meticulosamente la conversación enviada y entrenar al vendedor de forma sumamente analítica y constructiva.
+Eres WhatsCoach AI, un Coach de Ventas de Élite y mentor experto en cierres por WhatsApp en español.
+Audita la conversación y entrena al vendedor de forma analítica y constructiva.
 
-Tu evaluación debe basarse y hacer match explícito con este "Catálogo Maestro de 12 Técnicas de Venta":
+Catálogo Maestro de 12 Técnicas:
 ${JSON.stringify(MASTER_TECHNIQUES, null, 2)}
 
 <base_conocimiento>
 ${safeKnowledge || "No se suministró Base de Conocimiento adicional."}
 </base_conocimiento>
 
-Instrucciones de puntaje:
-1. Pondera justamente los indicadores de 1 a 10:
-   - "calidad_conversacion": Empatía sincera, fluidez, no saturar con muros de texto.
-   - "manejo_objeciones": Cómo reaccionó a las evasivas u objeciones de ${profile.name}.
-   - "tecnicas_cierre": Si propuso CTA claras y usó alguna técnica de cierre del catálogo maestro.
-   - "puntuacion_final": Del 1 al 100 ponderando los 3 anteriores.
-2. En "tecnicas_aplicadas", detecta cuáles técnicas fueron aplicadas REALMENTE por el vendedor. Cita la frase.
-3. En "tecnicas_no_aplicadas", lista técnicas que habrían sido de gran apoyo pero que el vendedor omitió.
-4. En "tecnica_cierre_recomendada", indica cuál técnica hubiese sido más acertada para cerrar a ${profile.name} y por qué.
-5. En "ejemplo_respuesta_ideal", confecciona una réplica perfecta en primera persona de WhatsApp para manejar la objeción clave o el cierre.
+Instrucciones:
+1. Puntúa de 1 a 10: calidad_conversacion, manejo_objeciones, tecnicas_cierre. De 0 a 100: puntuacion_final.
+2. tecnicas_aplicadas: técnicas realmente usadas por el vendedor, cita la frase.
+3. tecnicas_no_aplicadas: técnicas útiles que el vendedor omitió.
+4. tecnica_cierre_recomendada: cuál técnica era la más acertada para cerrar a ${profile.name} y por qué.
+5. ejemplo_respuesta_ideal: réplica perfecta en primera persona de WhatsApp.
 `;
 
     const promptText = `
 <transcripcion>
 ${formattedHistory}
 </transcripcion>
-
 <producto>
 Nombre: ${safeProductName}
 Precio: ${safeProductPrice}
 Descripción: ${safeProductDesc}
 </producto>
-
-Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exactamente al siguiente esquema:
+Responde en JSON con el esquema indicado.
 `;
 
     const schemaConfig = {
@@ -114,19 +142,17 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
         contents: [{ text: systemInstruction }, { text: promptText }],
         config: schemaConfig,
       });
-      console.log("✅ Respuesta Gemini [/api/evaluate]:", response.text?.slice(0, 100));
+      console.log("✅ Gemini evaluate OK:", response.text?.slice(0, 80));
       resultText = response.text || "";
     } catch (primaryError: any) {
-      console.warn("Fallo gemini-2.0-flash en evaluación, intentando gemini-1.5-flash-8b...", primaryError.message);
+      console.warn("⚠️ gemini-2.0-flash falló en evaluate:", primaryError.message);
       try {
         const ai = getGeminiClient();
-        console.log("🔷 Llamando a Gemini (gemini-1.5-flash-8b) fallback [/api/evaluate]...");
         const response = await ai.models.generateContent({
           model: "gemini-1.5-flash-8b",
           contents: [{ text: systemInstruction }, { text: promptText }],
           config: schemaConfig,
         });
-        console.log("✅ Respuesta Gemini fallback [/api/evaluate]:", response.text?.slice(0, 100));
         resultText = response.text || "";
         isFallbackModelUsed = true;
       } catch {
@@ -138,27 +164,21 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
 
     const parsedJson = JSON.parse(resultText);
     return res.json({ ...parsedJson, quotaUsedAlternative: isFallbackModelUsed });
-  } catch (error: any) {
-    console.error("Activando Coach local de emergencia para evaluación:", error.message);
 
+  } catch (error: any) {
+    console.error("⚠️ Activando Coach local de emergencia:", error.message);
     try {
       const { profile, product, history } = req.body;
       const textHistory = history || [];
-
       const appliedTechs: string[] = [];
       const unappliedTechs: string[] = [];
-
-      const sellerWords = textHistory
-        .filter((h: any) => h.role === "vendedor")
-        .map((h: any) => (h.text || "").toLowerCase())
-        .join(" ");
+      const sellerWords = textHistory.filter((h: any) => h.role === "vendedor").map((h: any) => (h.text || "").toLowerCase()).join(" ");
 
       MASTER_TECHNIQUES.forEach((tech) => {
         const matched = tech.keywords.some((kw) => sellerWords.includes(kw.toLowerCase()));
         if (matched) {
           const msg = textHistory.find((h: any) => h.role === "vendedor" && tech.keywords.some((kw) => h.text.toLowerCase().includes(kw.toLowerCase())));
-          const excerpt = msg ? `"${msg.text.substring(0, 35)}..."` : "";
-          appliedTechs.push(`Uso de ${tech.name} ${excerpt ? `en: ${excerpt}` : ""}`);
+          appliedTechs.push(`Uso de ${tech.name}${msg ? ` en: "${msg.text.substring(0, 35)}..."` : ""}`);
         } else {
           unappliedTechs.push(tech.name);
         }
@@ -187,7 +207,7 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
           tecnicas_no_aplicadas: unappliedTechs.slice(0, 4),
           tecnica_cierre_recomendada: "Se recomienda usar Feel-Felt-Found para diluir el rechazo por costo de manera altamente empática.",
         },
-        ejemplo_respuesta_ideal: `Entiendo plenamente cómo te sientes, ${profile?.name || "cliente"}. De hecho, otros clientes se sintieron exactamente igual de reacios con la inversión de ${product?.price || "el servicio"} al principio. Sin embargo, descubrieron que tras iniciar, la automatización les liberó tiempo y amortizaron el plan en semanas. ¿Empezamos con la opción básica o prefieres revisar el demo interactivo?`,
+        ejemplo_respuesta_ideal: `Entiendo plenamente cómo te sientes, ${profile?.name || "cliente"}. Otros clientes se sintieron igual de reacios con la inversión de ${product?.price || "el servicio"} al principio, pero descubrieron que amortizaron el plan en semanas. ¿Empezamos con la opción básica o prefieres revisar el demo?`,
         isLocalHeuristics: true,
       });
     } catch (localErr: any) {
