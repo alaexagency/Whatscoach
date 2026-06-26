@@ -54,7 +54,10 @@ async function requireAuth(req: any, res: any, next: any) {
     return res.status(401).json({ error: "No autenticado." });
   }
   const token = authHeader.split(" ")[1];
+  console.log('🔷 Llamando a Supabase (auth.getUser)...');
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  console.log('✅ Data:', user?.id ?? null);
+  console.log('❌ Error:', error);
   if (error || !user) {
     return res.status(401).json({ error: "Token inválido o expirado." });
   }
@@ -256,6 +259,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
     try {
       const ai = getGeminiClient();
       // Intentar primero con gemini-3.5-flash
+      console.log('🔷 Llamando a Gemini (gemini-3.5-flash) [/api/chat]...');
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: promptText,
@@ -264,6 +268,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
           temperature: 0.75,
         }
       });
+      console.log('✅ Respuesta Gemini [/api/chat]:', response.text?.slice(0, 100));
       reply = response.text?.trim() || "";
     } catch (primaryError: any) {
       console.warn("Falla de cuota o error con gemini-3.5-flash. Intentando fallback a gemini-3.1-flash-lite...", primaryError.message);
@@ -271,6 +276,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
       try {
         const ai = getGeminiClient();
         // Fallback a un modelo de peso ultra liviano y cuotas independientes
+        console.log('🔷 Llamando a Gemini (gemini-3.1-flash-lite) fallback [/api/chat]...');
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite",
           contents: promptText,
@@ -279,6 +285,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
             temperature: 0.75,
           }
         });
+        console.log('✅ Respuesta Gemini fallback [/api/chat]:', response.text?.slice(0, 100));
         reply = response.text?.trim() || "";
         usedFallbackModel = true;
       } catch (fallbackModelError) {
@@ -468,6 +475,7 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
     try {
       const ai = getGeminiClient();
       // Intentar primero con gemini-3.5-flash
+      console.log('🔷 Llamando a Gemini (gemini-3.5-flash) [/api/evaluate]...');
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: [
@@ -476,12 +484,14 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
         ],
         config: schemaConfig
       });
+      console.log('✅ Respuesta Gemini [/api/evaluate]:', response.text?.slice(0, 100));
       resultText = response.text || "";
     } catch (primaryError: any) {
       console.warn("Falla de cuota o error con gemini-3.5-flash en evaluación. Intentando fallback a gemini-3.1-flash-lite...", primaryError.message);
       
       try {
         const ai = getGeminiClient();
+        console.log('🔷 Llamando a Gemini (gemini-3.1-flash-lite) fallback [/api/evaluate]...');
         const response = await ai.models.generateContent({
           model: "gemini-3.1-flash-lite",
           contents: [
@@ -490,6 +500,7 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
           ],
           config: schemaConfig
         });
+        console.log('✅ Respuesta Gemini fallback [/api/evaluate]:', response.text?.slice(0, 100));
         resultText = response.text || "";
         isFallbackModelUsed = true;
       } catch (fallbackModelError) {

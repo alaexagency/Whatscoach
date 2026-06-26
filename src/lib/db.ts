@@ -44,6 +44,7 @@ export async function saveSession(params: SaveSessionParams): Promise<string | n
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  console.log('🔷 Llamando a Supabase (sessions.insert)...');
   const { data, error } = await supabase
     .from('sessions')
     .insert({
@@ -58,6 +59,8 @@ export async function saveSession(params: SaveSessionParams): Promise<string | n
     .select('id')
     .single()
 
+  console.log('✅ Data:', data);
+  console.log('❌ Error:', error);
   if (error) {
     console.error('Error guardando sesión:', error.message)
     return null
@@ -71,6 +74,7 @@ export async function saveEvaluation(params: SaveEvaluationParams): Promise<bool
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return false
 
+  console.log('🔷 Llamando a Supabase (evaluations.insert)...');
   const { error } = await supabase
     .from('evaluations')
     .insert({
@@ -88,6 +92,7 @@ export async function saveEvaluation(params: SaveEvaluationParams): Promise<bool
       ideal_response: params.idealResponse,
     })
 
+  console.log('❌ Error evaluación:', error);
   if (error) {
     console.error('Error guardando evaluación:', error.message)
     return false
