@@ -95,7 +95,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. Si
       const ai = getGeminiClient();
       console.log("🔷 Llamando a Gemini (gemini-2.0-flash-lite)...");
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
+        model: "gemini-2.5-flash",
         contents: promptText,
         config: { systemInstruction, temperature: 0.75 },
       });
@@ -106,7 +106,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. Si
       try {
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash-lite",
+          model: "gemini-2.5-flash",
           contents: promptText,
           config: { systemInstruction, temperature: 0.75 },
         });
