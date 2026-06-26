@@ -1,4 +1,4 @@
-import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { MessageCircle, TrendingUp, Award, Users, ChevronRight, CheckCircle2 } from 'lucide-react'
 import {
   ClientProfileKey,
@@ -8,7 +8,7 @@ import {
 } from '../constants'
 
 interface HomePageProps {
-  onLogin: () => void
+  onLogin?: () => void
 }
 
 const FEATURES = [
@@ -49,6 +49,8 @@ const STEPS = [
 ]
 
 export function HomePage({ onLogin }: HomePageProps) {
+  const navigate = useNavigate()
+  const goToLogin = () => { onLogin?.(); navigate('/login') }
   return (
     <div className="min-h-screen bg-white font-sans">
 
@@ -59,7 +61,7 @@ export function HomePage({ onLogin }: HomePageProps) {
             <span className="text-xl font-bold text-[#128C7E]">WhatsCoach</span>
           </div>
           <button
-            onClick={onLogin}
+            onClick={goToLogin}
             className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white font-bold px-5 py-2 rounded-xl text-sm transition-colors shadow-sm"
           >
             Iniciar sesión
@@ -84,14 +86,14 @@ export function HomePage({ onLogin }: HomePageProps) {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
-              onClick={onLogin}
+              onClick={goToLogin}
               className="flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white font-bold px-8 py-4 rounded-2xl text-base transition-colors shadow-lg shadow-green-200"
             >
               Empezar gratis
               <ChevronRight className="h-5 w-5" />
             </button>
             <button
-              onClick={onLogin}
+              onClick={goToLogin}
               className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold px-8 py-4 rounded-2xl text-base transition-colors"
             >
               Ver demo
@@ -190,7 +192,7 @@ export function HomePage({ onLogin }: HomePageProps) {
             Crea tu cuenta gratis y haz tu primera simulación en menos de 2 minutos.
           </p>
           <button
-            onClick={onLogin}
+            onClick={goToLogin}
             className="flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white font-bold px-10 py-4 rounded-2xl text-base transition-colors shadow-lg shadow-green-200 mx-auto"
           >
             Crear cuenta gratis
