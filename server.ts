@@ -2,15 +2,93 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { rateLimit } from "express-rate-limit";
+import helmet from "helmet";
+import cors from "cors";
+import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
-import fs from "fs";
 
-dotenv.config();
+dotenv.config({ path: ".env.local" });
+dotenv.config(); // fallback a .env
+
+// Validar variables de entorno críticas al arrancar
+const REQUIRED_ENV = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+  console.error(`❌ Faltan variables de entorno: ${missingEnv.join(", ")}`);
+  console.error("   Crea un archivo .env.local con esas variables.");
+  process.exit(1);
+}
 
 const app = express();
 const PORT = 3000;
 
+app.use(helmet({ contentSecurityPolicy: false })); // CSP desactivado para que Vite funcione en dev
+
+const devOrigins = ["http://localhost:3000", "http://localhost:5173"];
+const allowedOrigins = process.env.NODE_ENV === "production" && process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : devOrigins;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Origen no permitido por CORS"));
+    }
+  },
+  credentials: true,
+}));
+
+// Cliente Supabase para verificar tokens en el servidor
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+// Middleware — verifica que el request viene de un usuario autenticado
+async function requireAuth(req: any, res: any, next: any) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "No autenticado." });
+  }
+  const token = authHeader.split(" ")[1];
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) {
+    return res.status(401).json({ error: "Token inválido o expirado." });
+  }
+  req.user = user;
+  next();
+}
+
+// Rate limiting — protege la Gemini API key
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 20,             // máx 20 requests por minuto por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Demasiadas solicitudes. Espera un momento e intenta de nuevo." },
+});
+
+const evalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,              // evaluaciones más costosas — máx 5 por minuto
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Límite de evaluaciones alcanzado. Espera un momento." },
+});
+
 app.use(express.json());
+
+// Sanitiza contenido de usuario antes de insertarlo en prompts de IA
+function sanitizeForPrompt(value: unknown, maxLength = 1000): string {
+  if (typeof value !== "string") return "";
+  return value
+    .slice(0, maxLength)
+    .replace(/<\/?[a-zA-Z_]+>/g, "") // elimina etiquetas XML/HTML que podrían romper delimitadores
+    .trim();
+}
 
 // Lazy-loaded Gemini client
 let aiInstance: GoogleGenAI | null = null;
@@ -109,18 +187,44 @@ const MASTER_TECHNIQUES = [
 ];
 
 // POST /api/chat - Generar respuesta del cliente simulado con IA (con fallback elegante)
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", apiLimiter, requireAuth, async (req, res) => {
   try {
     const { profile, product, history, difficulty, knowledge } = req.body;
 
-    if (!profile || !product) {
+    if (!profile || !product || !product.name || !product.price) {
       return res.status(400).json({ error: "Faltan datos obligatorios (perfil del cliente o producto)." });
     }
+    if (!Array.isArray(history)) {
+      return res.status(400).json({ error: "El historial debe ser un array." });
+    }
+    if (history.length > 100) {
+      return res.status(400).json({ error: "Historial demasiado largo." });
+    }
+    if (typeof product.name === "string" && product.name.length > 200) {
+      return res.status(400).json({ error: "Nombre de producto demasiado largo." });
+    }
+    if (typeof knowledge === "string" && knowledge.length > 50000) {
+      return res.status(400).json({ error: "Base de conocimiento demasiado grande." });
+    }
+
+    const safeProductName = sanitizeForPrompt(product.name, 200);
+    const safeProductPrice = sanitizeForPrompt(product.price, 50);
+    const safeProductDesc = sanitizeForPrompt(product.description, 1000);
+    const safeKnowledge = sanitizeForPrompt(knowledge, 50000);
+    const safeHistory = history
+      .slice(-50) // máx últimos 50 mensajes
+      .map((h: any) => `${h.role === 'vendedor' ? 'Vendedor' : 'Cliente'}: ${sanitizeForPrompt(h.text, 1000)}`)
+      .join('\n');
 
     const systemInstruction = `
 Eres un cliente potencial conversando por un chat de WhatsApp con un vendedor. Sé ultra realista, coherente y humano.
 Tu nombre y temperamento: ${profile.name} (${profile.emoji}). Perfil: ${profile.description}. Nivel de dificultad: ${difficulty}.
-Producto ofrecido: "${product.name}", Precio: "${product.price}", Detalles del producto: "${product.description}".
+
+<producto>
+Nombre: ${safeProductName}
+Precio: ${safeProductPrice}
+Descripción: ${safeProductDesc}
+</producto>
 
 Reglas estrictas de comportamiento en WhatsApp:
 1. Responde de forma muy natural, con el tono informal y casual de WhatsApp. Usa abreviaciones simples, mensajes cortos (1 a 3 líneas máximo por mensaje).
@@ -131,8 +235,13 @@ Reglas estrictas de comportamiento en WhatsApp:
 3. No cedas la venta al primer intento. Utiliza de forma espontánea y progresiva las siguientes objeciones del perfil: ${JSON.stringify(profile.objections)}.
 4. Si el vendedor utiliza la Base de conocimiento adicional o te brinda valor con técnicas apropiadas, muéstrate más receptivo. Si es insistente desmedido, frío o robótico, sé más cortante.
 
-Conversación hasta el momento:
-${history.map((h: any) => `${h.role === 'vendedor' ? 'Vendedor' : 'Cliente'}: ${h.text}`).join('\n')}
+<base_conocimiento>
+${safeKnowledge || 'No se suministró base de conocimiento adicional.'}
+</base_conocimiento>
+
+<conversacion>
+${safeHistory}
+</conversacion>
 
 Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No agregues formatos de etiqueta como "Cliente: " ni comillas. Responde tal y como escribirías en tu celular.
 `;
@@ -222,15 +331,7 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
         }
       }
       
-      // Escribir error en log de depuración
-      try {
-        fs.writeFileSync("api-error.log", JSON.stringify({
-          endpoint: "/api/chat",
-          time: new Date().toISOString(),
-          message: error.message,
-          info: "Simulador de emergencia local activado exitosamente."
-        }, null, 2));
-      } catch (e) {}
+      console.error(JSON.stringify({ endpoint: "/api/chat", time: new Date().toISOString(), info: "Simulador de emergencia local activado." }));
 
       return res.json({ 
         text: generatedReply, 
@@ -246,15 +347,28 @@ Escribe únicamente el mensaje que responderías como el Cliente en WhatsApp. No
 });
 
 // POST /api/evaluate - Evaluar la sesión de ventas con IA Coach Experto (con fallback elegante)
-app.post("/api/evaluate", async (req, res) => {
+app.post("/api/evaluate", evalLimiter, requireAuth, async (req, res) => {
   try {
     const { profile, product, history, knowledge } = req.body;
 
-    if (!history || history.length === 0) {
+    if (!history || !Array.isArray(history) || history.length === 0) {
       return res.status(400).json({ error: "No hay historial para evaluar." });
     }
+    if (history.length > 100) {
+      return res.status(400).json({ error: "Historial demasiado largo." });
+    }
+    if (!profile || !product) {
+      return res.status(400).json({ error: "Faltan datos del perfil o producto." });
+    }
 
-    const formattedHistory = history.map((h: any) => `${h.role === 'vendedor' ? 'Vendedor (Usuario)' : 'Cliente (Simulado)'}: ${h.text}`).join('\n');
+    const safeProductName = sanitizeForPrompt(product.name, 200);
+    const safeProductPrice = sanitizeForPrompt(product.price, 50);
+    const safeProductDesc = sanitizeForPrompt(product.description, 1000);
+    const safeKnowledge = sanitizeForPrompt(knowledge, 50000);
+    const formattedHistory = history
+      .slice(-50)
+      .map((h: any) => `${h.role === 'vendedor' ? 'Vendedor (Usuario)' : 'Cliente (Simulado)'}: ${sanitizeForPrompt(h.text, 1000)}`)
+      .join('\n');
 
     const systemInstruction = `
 Eres WhatsCoach AI, un Coach de Ventas de Élite y mentor experto en cierres por WhatsApp de alto impacto en español.
@@ -263,8 +377,9 @@ Tu trabajo es auditar meticulosamente la conversación enviada y entrenar al ven
 Tu evaluación debe basarse y hacer match explícito con este "Catálogo Maestro de 12 Técnicas de Venta":
 ${JSON.stringify(MASTER_TECHNIQUES, null, 2)}
 
-Si el usuario cargó una Base de Conocimiento adicional (por ejemplo, textos de Best Sellers de sus PDFs), considera estas instrucciones adicionales para evaluar:
-"${knowledge || 'No se suministró Base de Conocimiento adicional.'}"
+<base_conocimiento>
+${safeKnowledge || 'No se suministró Base de Conocimiento adicional.'}
+</base_conocimiento>
 
 Instrucciones de puntaje y dictamen científico:
 1. Pondera justamente los indicadores de 1 a 10:
@@ -279,13 +394,15 @@ Instrucciones de puntaje y dictamen científico:
 `;
 
     const promptText = `
-Transcripción de la Conversación a Evaluar:
+<transcripcion>
 ${formattedHistory}
+</transcripcion>
 
-Producto Ofrecido:
-Nombre: ${product.name}
-Precio: ${product.price}
-Descripción: ${product.description}
+<producto>
+Nombre: ${safeProductName}
+Precio: ${safeProductPrice}
+Descripción: ${safeProductDesc}
+</producto>
 
 Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exactamente al siguiente esquema con los tipos de datos correctos:
 `;
@@ -461,14 +578,7 @@ Formato de Respuesta obligatorio (JSON). El JSON que devuelvas debe ceñirse exa
         isLocalHeuristics: true
       };
 
-      try {
-        fs.writeFileSync("api-error.log", JSON.stringify({
-          endpoint: "/api/evaluate",
-          time: new Date().toISOString(),
-          message: error.message,
-          info: "Coach local de emergencia activado con éxito."
-        }, null, 2));
-      } catch (e) {}
+      console.error(JSON.stringify({ endpoint: "/api/evaluate", time: new Date().toISOString(), info: "Coach local de emergencia activado." }));
 
       res.json(localEvaluation);
 
