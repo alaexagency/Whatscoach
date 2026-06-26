@@ -15,7 +15,8 @@ async function requireAuth(req: VercelRequest): Promise<{ user: any; error: stri
   const authHeader = req.headers["authorization"] as string | undefined;
   if (!authHeader?.startsWith("Bearer ")) return { user: null, error: "No autenticado." };
   const token = authHeader.split(" ")[1];
-  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  // Usamos anon key para getUser — no requiere service role
+  const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) return { user: null, error: "Token inválido o expirado." };
   return { user, error: null };
@@ -25,8 +26,8 @@ const MASTER_TECHNIQUES = [
   { name: "Straight Line", author: "Jordan Belfort", keywords: ["transferencia de certeza", "sería una estupidez", "seguro", "definitivamente", "absoluta certeza", "sin duda"], description: "Transferencia de certeza absoluta." },
   { name: "SPIN Selling", author: "Neil Rackham", keywords: ["situación", "problema", "implicación", "necesidad de pago", "consecuencia", "impacto", "qué pasaría si", "cuánto te cuesta"], description: "Preguntas de Situación, Problema, Implicación y Necesidad." },
   { name: "Feel-Felt-Found", author: "Clásica", keywords: ["entiendo cómo te sientes", "muchos se han sentido", "descubrieron que", "sé por lo que pasas", "otros clientes pensaban igual"], description: "Validación y empatía empática." },
-  { name: "Benjamin Franklin Close", author: "Ben Franklin", keywords: ["pros y contras", "lista", "beneficios vs", "ventajas y desventajas", "balance", "lado positivo", "contrapesos"], description: "Listar pros (muchos) contra los contras (pocos)." },
-  { name: "Assumptive Close", author: "Clásica", keywords: ["te envío el link", "¿con qué tarjeta?", "dirección de envío", "cuándo empezamos", "agenda abierta", "dónde te lo mando"], description: "Asumir el trato cerrado y pasar a detalles de cobro." },
+  { name: "Benjamin Franklin Close", author: "Ben Franklin", keywords: ["pros y contras", "lista", "beneficios vs", "ventajas y desventajas", "balance", "lado positivo", "contrapesos"], description: "Listar pros contra los contras." },
+  { name: "Assumptive Close", author: "Clásica", keywords: ["te envío el link", "¿con qué tarjeta?", "dirección de envío", "cuándo empezamos", "agenda abierta", "dónde te lo mando"], description: "Asumir el trato cerrado." },
   { name: "Urgencia Real", author: "Escasez", keywords: ["quedan", "últimos", "solo hoy", "se acaba", "cupo limitado", "plazas limitadas", "precio sube hoy", "hora crucial"], description: "Crear urgencia auténtica." },
   { name: "Prueba Social", author: "Cialdini", keywords: ["testimonio", "caso de éxito", "mira esto", "te paso el caso", "resultados reales", "captura de pantalla", "audio de alumno"], description: "Mostrar evidencia de otros clientes." },
   { name: "Reframing", author: "PNL/Ventas", keywords: ["inversión", "no es un gasto", "se paga solo", "retorno", "ahorras tiempo", "ganancia en lugar de", "en realidad representa"], description: "Re-encuadrar el costo como inversión." },
@@ -39,10 +40,9 @@ const MASTER_TECHNIQUES = [
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(k => !process.env[k]);
+  const missing = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY"].filter(k => !process.env[k]);
   if (missing.length > 0) {
-    console.error("❌ Variables de entorno faltantes:", missing.join(", "));
-    return res.status(500).json({ error: `Configuración incompleta: ${missing.join(", ")}` });
+    return res.status(500).json({ error: "Error de configuración del servidor." });
   }
 
   const { user, error: authError } = await requireAuth(req);
@@ -62,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const safeProductPrice = sanitizeForPrompt(product.price, 50);
     const safeProductDesc = sanitizeForPrompt(product.description, 1000);
     const safeKnowledge = sanitizeForPrompt(knowledge, 50000);
+    const safeName = sanitizeForPrompt(profile.name, 100);
     const formattedHistory = history
       .slice(-50)
       .map((h: any) => `${h.role === "vendedor" ? "Vendedor (Usuario)" : "Cliente (Simulado)"}: ${sanitizeForPrompt(h.text, 1000)}`)
@@ -82,7 +83,7 @@ Instrucciones:
 1. Puntúa de 1 a 10: calidad_conversacion, manejo_objeciones, tecnicas_cierre. De 0 a 100: puntuacion_final.
 2. tecnicas_aplicadas: técnicas realmente usadas por el vendedor, cita la frase.
 3. tecnicas_no_aplicadas: técnicas útiles que el vendedor omitió.
-4. tecnica_cierre_recomendada: cuál técnica era la más acertada para cerrar a ${profile.name} y por qué.
+4. tecnica_cierre_recomendada: cuál técnica era la más acertada para cerrar a ${safeName} y por qué.
 5. ejemplo_respuesta_ideal: réplica perfecta en primera persona de WhatsApp.
 `;
 
@@ -136,20 +137,17 @@ Responde en JSON con el esquema indicado.
 
     try {
       const ai = getGeminiClient();
-      console.log("🔷 Llamando a Gemini (gemini-2.0-flash-lite) [/api/evaluate]...");
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{ text: systemInstruction }, { text: promptText }],
         config: schemaConfig,
       });
-      console.log("✅ Gemini evaluate OK:", response.text?.slice(0, 80));
       resultText = response.text || "";
-    } catch (primaryError: any) {
-      console.warn("⚠️ gemini-2.0-flash falló en evaluate:", primaryError.message);
+    } catch {
       try {
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-2.5-flash-lite",
           contents: [{ text: systemInstruction }, { text: promptText }],
           config: schemaConfig,
         });
@@ -165,8 +163,7 @@ Responde en JSON con el esquema indicado.
     const parsedJson = JSON.parse(resultText);
     return res.json({ ...parsedJson, quotaUsedAlternative: isFallbackModelUsed });
 
-  } catch (error: any) {
-    console.error("⚠️ Activando Coach local de emergencia:", error.message);
+  } catch {
     try {
       const { profile, product, history } = req.body;
       const textHistory = history || [];
@@ -207,11 +204,10 @@ Responde en JSON con el esquema indicado.
           tecnicas_no_aplicadas: unappliedTechs.slice(0, 4),
           tecnica_cierre_recomendada: "Se recomienda usar Feel-Felt-Found para diluir el rechazo por costo de manera altamente empática.",
         },
-        ejemplo_respuesta_ideal: `Entiendo plenamente cómo te sientes, ${profile?.name || "cliente"}. Otros clientes se sintieron igual de reacios con la inversión de ${product?.price || "el servicio"} al principio, pero descubrieron que amortizaron el plan en semanas. ¿Empezamos con la opción básica o prefieres revisar el demo?`,
+        ejemplo_respuesta_ideal: `Entiendo plenamente cómo te sientes, ${sanitizeForPrompt(profile?.name, 100) || "cliente"}. Otros clientes se sintieron igual de reacios con la inversión de ${sanitizeForPrompt(product?.price, 50) || "el servicio"} al principio, pero descubrieron que amortizaron el plan en semanas. ¿Empezamos con la opción básica o prefieres revisar el demo?`,
         isLocalHeuristics: true,
       });
-    } catch (localErr: any) {
-      console.error("Fallo crítico en evaluación local:", localErr);
+    } catch {
       return res.status(500).json({ error: "Falla general al procesar la evaluación." });
     }
   }
