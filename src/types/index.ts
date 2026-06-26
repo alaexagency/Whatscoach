@@ -8,7 +8,7 @@ export interface Profile {
   full_name: string
   avatar_url: string | null
   role: UserRole
-  manager_id: string | null
+  company_id: string | null
   created_at: string
   updated_at: string
 }

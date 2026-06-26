@@ -29,12 +29,12 @@ export function useStats(profile: Profile | null) {
   async function fetchStats(role: UserRole, userId: string) {
     setLoading(true)
 
-    let sessionQuery = supabase.from('sessions').select('id, client_profile, created_at, manager_id')
+    let sessionQuery = supabase.from('sessions').select('id, client_profile, created_at, company_id')
 
     if (role === UserRole.Vendedor) {
       sessionQuery = sessionQuery.eq('user_id', userId)
-    } else if (role === UserRole.Manager) {
-      sessionQuery = sessionQuery.eq('manager_id', userId)
+    } else if (role === UserRole.Company) {
+      sessionQuery = sessionQuery.eq('company_id', userId)
     }
     // UserRole.Admin ve todo — sin filtro
 

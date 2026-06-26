@@ -4,7 +4,7 @@
 
 export enum UserRole {
   Admin    = 'admin',
-  Manager  = 'manager',
+  Company  = 'company',
   Vendedor = 'vendedor',
 }
 
@@ -34,19 +34,19 @@ export enum Difficulty {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   [UserRole.Admin]:    'Administrador',
-  [UserRole.Manager]:  'Manager',
+  [UserRole.Company]:  'Empresa',
   [UserRole.Vendedor]: 'Vendedor',
 }
 
 export const ROLE_COLORS: Record<UserRole, string> = {
   [UserRole.Admin]:    'bg-purple-100 text-purple-700',
-  [UserRole.Manager]:  'bg-blue-100 text-blue-700',
+  [UserRole.Company]:  'bg-blue-100 text-blue-700',
   [UserRole.Vendedor]: 'bg-emerald-100 text-emerald-700',
 }
 
 export const ROLE_BANNER: Record<UserRole, string> = {
   [UserRole.Admin]:    '⚙️ Vista de administrador — estás viendo datos de toda la plataforma.',
-  [UserRole.Manager]:  '👥 Vista de manager — estás viendo las sesiones de tu equipo.',
+  [UserRole.Company]:  '🏢 Vista de empresa — estás viendo las sesiones de tu equipo.',
   [UserRole.Vendedor]: '',
 }
 

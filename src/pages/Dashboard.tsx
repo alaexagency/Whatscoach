@@ -34,14 +34,14 @@ export function Dashboard({ profile, onStartSimulation, onGoToProfile, onSignOut
   const { stats, loading } = useStats(profile)
 
   const isAdmin   = profile.role === UserRole.Admin
-  const isManager = profile.role === UserRole.Manager
+  const isCompany = profile.role === UserRole.Company
   const isVendedor = profile.role === UserRole.Vendedor
 
   const initials = profile.full_name
     ? profile.full_name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()
     : profile.email[0].toUpperCase()
 
-  const sessionsSub  = isAdmin ? UI_MESSAGES.dashboard.subPlatform : isManager ? UI_MESSAGES.dashboard.subTeam : UI_MESSAGES.dashboard.subOwn
+  const sessionsSub  = isAdmin ? UI_MESSAGES.dashboard.subPlatform : isCompany ? UI_MESSAGES.dashboard.subTeam : UI_MESSAGES.dashboard.subOwn
   const bannerText   = ROLE_BANNER[profile.role]
 
   return (
@@ -130,8 +130,8 @@ export function Dashboard({ profile, onStartSimulation, onGoToProfile, onSignOut
             <StatCard
               icon={<Users className="h-5 w-5" />}
               label={isAdmin ? UI_MESSAGES.profile.role : 'Equipo'}
-              value={isAdmin ? ROLE_LABELS[UserRole.Admin] : isManager ? ROLE_LABELS[UserRole.Manager] : '—'}
-              sub={isAdmin ? 'acceso total' : isManager ? 'vista de equipo' : profile.email}
+              value={isAdmin ? ROLE_LABELS[UserRole.Admin] : isCompany ? ROLE_LABELS[UserRole.Company] : '—'}
+              sub={isAdmin ? 'acceso total' : isCompany ? 'vista de equipo' : profile.email}
             />
           </div>
         )}

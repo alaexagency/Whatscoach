@@ -43,10 +43,17 @@ export async function saveSession(params: SaveSessionParams): Promise<string | n
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('company_id')
+    .eq('id', user.id)
+    .single()
+
   const { data, error } = await supabase
     .from('sessions')
     .insert({
       user_id: user.id,
+      company_id: profileData?.company_id ?? null,
       product_name: params.productName,
       product_price: params.productPrice,
       product_desc: params.productDesc,
