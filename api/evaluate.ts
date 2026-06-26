@@ -136,9 +136,9 @@ Responde en JSON con el esquema indicado.
 
     try {
       const ai = getGeminiClient();
-      console.log("🔷 Llamando a Gemini (gemini-2.0-flash) [/api/evaluate]...");
+      console.log("🔷 Llamando a Gemini (gemini-2.0-flash-lite) [/api/evaluate]...");
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.0-flash-lite",
         contents: [{ text: systemInstruction }, { text: promptText }],
         config: schemaConfig,
       });
@@ -149,7 +149,7 @@ Responde en JSON con el esquema indicado.
       try {
         const ai = getGeminiClient();
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash-8b-001",
+          model: "gemini-2.0-flash-lite",
           contents: [{ text: systemInstruction }, { text: promptText }],
           config: schemaConfig,
         });
