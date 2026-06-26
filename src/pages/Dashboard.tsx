@@ -2,6 +2,7 @@ import React from 'react'
 import { TrendingUp, MessageCircle, Award, Users, Play, ChevronRight, LogOut } from 'lucide-react'
 import type { Profile } from '../types'
 import { useStats } from '../hooks/useStats'
+import { AdminPanel } from '../components/admin/AdminPanel'
 import {
   UserRole,
   ROLE_LABELS,
@@ -192,7 +193,10 @@ export function Dashboard({ profile, onStartSimulation, onGoToProfile, onSignOut
           )}
         </div>
 
-        {/* Banner admin/manager */}
+        {/* Panel de empresas — solo admin */}
+        {isAdmin && <AdminPanel />}
+
+        {/* Banner admin/company */}
         {bannerText && (
           <div className="bg-[#128C7E]/10 border border-[#128C7E]/20 rounded-2xl px-6 py-4">
             <p className="text-sm font-bold text-[#128C7E]">{bannerText}</p>
