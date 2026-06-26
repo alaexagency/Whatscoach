@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage'
 import { LoginPage } from './components/auth/LoginPage'
 import { Dashboard } from './pages/Dashboard'
 import { ProfilePage } from './pages/ProfilePage'
+import { AdminCompanyPage } from './pages/AdminCompanyPage'
 import { getMaintenanceMode } from './lib/db'
 import { UserRole } from './constants'
 import App from './App'
@@ -144,9 +145,10 @@ export function Root() {
         user ? <Navigate to="/dashboard" replace /> : <LoginPage maintenanceMode={maintenanceMode} />
       } />
 
-      <Route path="/dashboard" element={<AuthGuard><DashboardPage /></AuthGuard>} />
-      <Route path="/simulator" element={<AuthGuard><SimulatorPage /></AuthGuard>} />
-      <Route path="/profile"   element={<AuthGuard><ProfilePageWrapper /></AuthGuard>} />
+      <Route path="/dashboard"                    element={<AuthGuard><DashboardPage /></AuthGuard>} />
+      <Route path="/simulator"                    element={<AuthGuard><SimulatorPage /></AuthGuard>} />
+      <Route path="/profile"                      element={<AuthGuard><ProfilePageWrapper /></AuthGuard>} />
+      <Route path="/admin/companies/:companyId"   element={<AuthGuard><AdminCompanyPage /></AuthGuard>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
