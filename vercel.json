@@ -4,11 +4,13 @@
   "framework": null,
   "functions": {
     "api/chat.ts": { "maxDuration": 30 },
-    "api/evaluate.ts": { "maxDuration": 60 }
+    "api/evaluate.ts": { "maxDuration": 60 },
+    "api/diagnose.ts": { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/api/chat", "destination": "/api/chat" },
     { "source": "/api/evaluate", "destination": "/api/evaluate" },
+    { "source": "/api/diagnose", "destination": "/api/diagnose" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

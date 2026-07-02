@@ -7,6 +7,9 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Dashboard } from './pages/Dashboard'
 import { ProfilePage } from './pages/ProfilePage'
 import { AdminCompanyPage } from './pages/AdminCompanyPage'
+import { DiagnosePage } from './pages/DiagnosePage'
+import { DiagnoseResultPage } from './pages/DiagnoseResultPage'
+import { DiagnoseHistoryPage } from './pages/DiagnoseHistoryPage'
 import { getMaintenanceMode } from './lib/db'
 import { UserRole } from './constants'
 import App from './App'
@@ -71,9 +74,31 @@ function DashboardPage() {
       profile={profile}
       onStartSimulation={() => navigate('/simulator')}
       onGoToProfile={() => navigate('/profile')}
+      onGoToDiagnose={() => navigate('/diagnose')}
       onSignOut={signOut}
     />
   )
+}
+
+function DiagnosePageWrapper() {
+  const { user } = useAuth()
+  const { profile } = useProfile(user)
+  if (!profile) return <Spinner />
+  return <DiagnosePage profile={profile} />
+}
+
+function DiagnoseResultPageWrapper() {
+  const { user } = useAuth()
+  const { profile } = useProfile(user)
+  if (!profile) return <Spinner />
+  return <DiagnoseResultPage profile={profile} />
+}
+
+function DiagnoseHistoryPageWrapper() {
+  const { user } = useAuth()
+  const { profile } = useProfile(user)
+  if (!profile) return <Spinner />
+  return <DiagnoseHistoryPage profile={profile} />
 }
 
 function SimulatorPage() {
@@ -149,6 +174,9 @@ export function Root() {
       <Route path="/simulator"                    element={<AuthGuard><SimulatorPage /></AuthGuard>} />
       <Route path="/profile"                      element={<AuthGuard><ProfilePageWrapper /></AuthGuard>} />
       <Route path="/admin/companies/:companyId"   element={<AuthGuard><AdminCompanyPage /></AuthGuard>} />
+      <Route path="/diagnose"                     element={<AuthGuard><DiagnoseHistoryPageWrapper /></AuthGuard>} />
+      <Route path="/diagnose/upload"              element={<AuthGuard><DiagnosePageWrapper /></AuthGuard>} />
+      <Route path="/diagnose/:id"                 element={<AuthGuard><DiagnoseResultPageWrapper /></AuthGuard>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

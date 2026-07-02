@@ -1,5 +1,5 @@
 import React from 'react'
-import { TrendingUp, MessageCircle, Award, Users, Play, ChevronRight, LogOut } from 'lucide-react'
+import { TrendingUp, MessageCircle, Award, Users, Play, ChevronRight, LogOut, Stethoscope } from 'lucide-react'
 import type { Profile } from '../types'
 import { useStats } from '../hooks/useStats'
 import { AdminPanel } from '../components/admin/AdminPanel'
@@ -15,6 +15,7 @@ interface DashboardProps {
   profile: Profile
   onStartSimulation: () => void
   onGoToProfile: () => void
+  onGoToDiagnose: () => void
   onSignOut: () => void
 }
 
@@ -31,7 +32,7 @@ function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: s
   )
 }
 
-export function Dashboard({ profile, onStartSimulation, onGoToProfile, onSignOut }: DashboardProps) {
+export function Dashboard({ profile, onStartSimulation, onGoToProfile, onGoToDiagnose, onSignOut }: DashboardProps) {
   const { stats, loading } = useStats(profile)
 
   const isAdmin   = profile.role === UserRole.Admin
@@ -90,15 +91,26 @@ export function Dashboard({ profile, onStartSimulation, onGoToProfile, onSignOut
             </h1>
             <p className="text-slate-400 text-sm mt-0.5">{UI_MESSAGES.dashboard.activitySummary}</p>
           </div>
-          {isVendedor && (
-            <button
-              onClick={onStartSimulation}
-              className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
-            >
-              <Play className="h-4 w-4" />
-              {UI_MESSAGES.dashboard.newSimulation}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {(isAdmin || isCompany) && (
+              <button
+                onClick={onGoToDiagnose}
+                className="flex items-center gap-2 bg-[#128C7E] hover:bg-[#0c6b60] text-white font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
+              >
+                <Stethoscope className="h-4 w-4" />
+                Diagnosticador
+              </button>
+            )}
+            {isVendedor && (
+              <button
+                onClick={onStartSimulation}
+                className="flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors text-sm"
+              >
+                <Play className="h-4 w-4" />
+                {UI_MESSAGES.dashboard.newSimulation}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
