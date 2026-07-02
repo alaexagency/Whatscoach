@@ -3,12 +3,16 @@
   "outputDirectory": "dist",
   "framework": null,
   "functions": {
-    "api/chat.ts": { "maxDuration": 30 },
-    "api/evaluate.ts": { "maxDuration": 60 }
+    "api/chat.ts":            { "maxDuration": 30 },
+    "api/evaluate.ts":        { "maxDuration": 60 },
+    "api/diagnose.ts":        { "maxDuration": 60 },
+    "api/extract-product.ts": { "maxDuration": 60 }
   },
   "rewrites": [
-    { "source": "/api/chat", "destination": "/api/chat" },
-    { "source": "/api/evaluate", "destination": "/api/evaluate" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/chat",            "destination": "/api/chat" },
+    { "source": "/api/evaluate",        "destination": "/api/evaluate" },
+    { "source": "/api/diagnose",        "destination": "/api/diagnose" },
+    { "source": "/api/extract-product", "destination": "/api/extract-product" },
+    { "source": "/(.*)",                "destination": "/index.html" }
   ]
 }
